@@ -1,0 +1,10 @@
+﻿<Application x:Class="GDStashViewer.App"
+							xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+							xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+							xmlns:local="clr-namespace:GDStashViewer"
+							StartupUri="MainWindow.xaml" >
+	<Application.Resources>
+		<MenuItem x:Key="infoMenuItem" Header="Hover Over Menu Item to see Full Path"
+					Background="{DynamicResource {x:Static SystemColors.InfoBrushKey}}" Foreground="{DynamicResource {x:Static SystemColors.InfoTextBrushKey}}" />
+	</Application.Resources>
+</Application>

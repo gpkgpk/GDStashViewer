@@ -1,0 +1,117 @@
+﻿<Window x:Class="GDStashViewer.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:ExtendedColumn="clr-namespace:ExtendedGrid.ExtendedColumn;assembly=ExtendedGrid" xmlns:ExtendedGridControl="clr-namespace:ExtendedGrid.ExtendedGridControl;assembly=ExtendedGrid" xmlns:clr="clr-namespace:System;assembly=mscorlib" xmlns:d="http://schemas.microsoft.com/expression/blend/2008" xmlns:local="clr-namespace:GDStashViewer" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:properties="clr-namespace:GDStashViewer.Properties"
+				Title="GD Stash Viewer" Width="800" Height="600"
+				Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"
+				Loaded="Window_Loaded" WindowStartupLocation="CenterScreen" mc:Ignorable="d">
+
+	<Window.CommandBindings>
+		<CommandBinding Command="ApplicationCommands.Open" Executed="OpenCmdExecuted" />
+	</Window.CommandBindings>
+	<Window.Resources>
+		<clr:String x:Key="LinkStr">Link</clr:String>
+	</Window.Resources>
+	<DockPanel>
+		<!--<Grid.RowDefinitions>
+			<RowDefinition Height="auto" />
+			<RowDefinition Height="*" />
+			<RowDefinition Height="auto" />
+		</Grid.RowDefinitions>-->
+		<ToolBarTray DockPanel.Dock="Top">
+			<ToolBar Grid.Row="0" VerticalContentAlignment="Center">
+				<!--</ToolBar>
+			<ToolBar VerticalContentAlignment="Center">-->
+				<Menu Background="Transparent">
+					<MenuItem Header="_File">
+						<MenuItem Command="ApplicationCommands.Open" Header="_Open Stash File(s)..." ToolTip="Load one or more GD stash file(s)" />
+						<MenuItem Click="menuSaveDontExport_Click" Header="Save Don't Export List" />
+						<MenuItem Click="menuReload_Click" Header="Re_load Open Stash File(s)" ToolTip="Reload all the currently open stash file(s) from disk to reflect changes" />
+						<MenuItem Click="menuOpenFolder_Click" Header="Open _Containing Folder" ToolTip="Open Parent Fodler of First Stash File" />
+						<MenuItem Click="menuOpenList_Click" Header="_All GD Stash Manager Stashes (List.cfg)" ToolTip="Load all the GD stash file(s) in GD StashManager's list" />
+						<MenuItem x:Name="menuMru" Header="_Recent" />
+					</MenuItem>
+				</Menu>
+				<Menu Background="Transparent">
+					<MenuItem Header="_Export">
+						<MenuItem Background="Transparent" Click="exportTextButton_Click" Header="_Export as Plain Text (Format Defined in Settings)" ToolTip="Export Data as filtered,sorted (grouped) to Text File &#x0d;&#x0a;Uses basic formatting specified in Settings-&gt;Export." />
+						<!--<MenuItem Header="Export As CSV (Comma Separated Values)" Click="exportCsv_Click" />-->
+					</MenuItem>
+				</Menu>
+
+				<Menu Background="Transparent">
+					<MenuItem Header="_Tools">
+						<MenuItem Click="settingsRenameListCfg_Click" Header="Rename GDStashManager's Files in List.cfg" />
+						<MenuItem Click="SaveGridLayout_Click" Header="_Save Grid Column Layout" />
+						<MenuItem Click="ResetGridLayout_Click" Header="_Reset Grid Column Layout" />
+						<MenuItem Click="ResetGridZoom_Click" Header="Reset Data Grid _Zoom" />
+						<MenuItem Click="settingsButton_Click" Header="Se_ttings..." />
+					</MenuItem>
+				</Menu>
+				<Separator />
+				<Button x:Name="buttonCopy" Margin="2" HorizontalAlignment="Right" Command="ApplicationCommands.Copy" ToolTip="Copy Selected Data (CTRL+A to select all) to paste into MS Excel, text file, Google Sheets etc.)">
+					<AccessText>_Copy</AccessText>
+				</Button>
+				<Separator />
+				<Label Target="{Binding ElementName=filterText}">_Filter:</Label>
+				<ComboBox x:Name="fieldCombo" Margin="2" IsReadOnly="True" SelectedIndex="0">
+					<ComboBoxItem IsSelected="True">Name</ComboBoxItem>
+					<ComboBoxItem>Category</ComboBoxItem>
+					<ComboBoxItem>Sub Cat.</ComboBoxItem>
+					<!--<ComboBoxItem >Stash File</ComboBoxItem>-->
+				</ComboBox>
+
+				<ComboBox x:Name="filterCombo" Margin="2" IsReadOnly="True" SelectedIndex="0">
+					<ComboBoxItem IsSelected="True">Contains</ComboBoxItem>
+					<ComboBoxItem>Starts With</ComboBoxItem>
+					<ComboBoxItem>Ends With</ComboBoxItem>
+					<ComboBoxItem>Is</ComboBoxItem>
+				</ComboBox>
+				<ComboBox x:Name="filterText" MinWidth="100" Margin="2" IsEditable="True" ItemsSource="{Binding Source={x:Static properties:Settings.Default}, Path=FilterHistory}" ToolTip="Type text to filter on then click Filter button" />
+				<Button x:Name="filterButton" Margin="2" Click="filterButton_Click" FontWeight="Bold" IsDefault="true">
+					<AccessText>Fi_lter</AccessText>
+				</Button>
+				<Button x:Name="filterButtonClear" Margin="2" Click="filterButtonClear_Click">
+					<AccessText>Clea_r</AccessText>
+				</Button>
+				<Separator />
+				<Label>Grid:</Label>
+				<CheckBox x:Name="GridReadOnly" IsChecked="True">Read-Only</CheckBox>
+				<Label MouseDoubleClick="Label_MouseDoubleClick" Target="{Binding ElementName=gridZoomSlider}" ToolTip="Double Click to reset the Grid Zoom Factor">_Zoom:</Label>
+				<Slider x:Name="gridZoomSlider" MinWidth="80" LargeChange="0.25" Maximum="1.5" Minimum="0.5" SmallChange="0.1" TickFrequency="0.25" TickPlacement="TopLeft" ToolTip="Determines the Grid Zoom Factor. Use Control+MouseWheel to Zoom, Control+Middle Button to Reset" Value="1" />
+			</ToolBar>
+			<!--  <ToolBar HorizontalAlignment="Right">
+				<Label Target="{Binding ElementName=_dataGrid}" VerticalAlignment="Center" >_Grid Rows: </Label><TextBlock Text="{Binding ElementName=_dataGrid,Path=Items.Count}" VerticalAlignment="Center" />
+				</ToolBar>-->
+		</ToolBarTray>
+		<StatusBar DockPanel.Dock="Bottom">
+			<StatusBarItem>
+				<StackPanel Orientation="Horizontal">
+					<Label VerticalAlignment="Center" Target="{Binding ElementName=_dataGrid}">_Grid Rows:</Label>
+					<TextBlock VerticalAlignment="Center" Text="{Binding ElementName=_dataGrid, Path=Items.Count}" />
+				</StackPanel>
+			</StatusBarItem>
+			<Separator />
+			<StatusBarItem>
+				<Label x:Name="StatusText" VerticalAlignment="Center">Open or Drag&amp;Drop GD Stash File(s). Tip: Pass filename(s) in command line</Label>
+			</StatusBarItem>
+		</StatusBar>
+
+		<ExtendedGridControl:ExtendedDataGrid x:Name="_dataGrid" Grid.Row="1" AutoFilterFontSize="13.333" AutoGenerateColumns="True" ColumnReordered="dataGrid_ColumnLayoutChanged" FontSize="13.333" GroupByHeaderText="Click plus sign in column header to group by that column. Hold Shift and click header to sort by additional column(s)" HeadersVisibility="All" HideColumnChooser="False"
+																					IsReadOnly="{Binding IsChecked,
+																															 ElementName=GridReadOnly}"
+																					IsTabStop="True" Loaded="dataGrid_Loaded" ScrollViewer.HorizontalScrollBarVisibility="Visible" ScrollViewer.VerticalScrollBarVisibility="Visible" SelectionUnit="CellOrRowHeader" ShowSortOrder="True">
+			<ExtendedGridControl:ExtendedDataGrid.Columns>
+				<DataGridHyperlinkColumn x:Name="LinkColumn" Width="48" Binding="{Binding Url}" CanUserSort="False" ClipboardContentBinding="{Binding Url}" ContentBinding="{Binding Mode=OneWay, Source={StaticResource LinkStr}}" DisplayIndex="0" Header="Link" IsReadOnly="True">
+					<DataGridHyperlinkColumn.ElementStyle>
+						<Style>
+							<EventSetter Event="Hyperlink.Click" Handler="Hyperlink_Click" />
+						</Style>
+					</DataGridHyperlinkColumn.ElementStyle>
+				</DataGridHyperlinkColumn>
+				<!--<DataGridCheckBoxColumn x:Name="DontExportColumn" Width="48" Binding="{Binding DontExport, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" DisplayIndex="1" Header="Don't Export" IsReadOnly="False" />-->
+			</ExtendedGridControl:ExtendedDataGrid.Columns>
+
+			<ExtendedGridControl:ExtendedDataGrid.LayoutTransform>
+				<ScaleTransform CenterX="0" CenterY="0" ScaleX="{Binding ElementName=gridZoomSlider, Path=Value}" ScaleY="{Binding ElementName=gridZoomSlider, Path=Value}" />
+			</ExtendedGridControl:ExtendedDataGrid.LayoutTransform>
+		</ExtendedGridControl:ExtendedDataGrid>
+	</DockPanel>
+</Window>
