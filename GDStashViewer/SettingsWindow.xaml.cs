@@ -1,6 +1,8 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using Microsoft.WindowsAPICodePack.Dialogs;
+using System;
+using System.IO;
 using System.Windows;
-using Microsoft.Win32;
 
 namespace GDStashViewer
 {
@@ -17,13 +19,13 @@ namespace GDStashViewer
 		private void cancelButton_Click(object sender, RoutedEventArgs e)
 		{
 			DialogResult = false;
-			this.Close();
+			Close();
 		}
 
 		private void okButton_Click(object sender, RoutedEventArgs e)
 		{
 			DialogResult = true;
-			this.Close();
+			Close();
 		}
 
 		//private void browseItemTagFileButton_Click(object sender, RoutedEventArgs e)
@@ -39,32 +41,38 @@ namespace GDStashViewer
 
 		private void browseFolderButton_Click(object sender, RoutedEventArgs e)
 		{
-			var dialog = new System.Windows.Forms.FolderBrowserDialog();
-			dialog.SelectedPath = Properties.Settings.Default.ExtractedRootFolder;
+			System.Windows.Forms.FolderBrowserDialog dialog = new System.Windows.Forms.FolderBrowserDialog
+			{
+				SelectedPath = Properties.Settings.Default.ExtractedRootFolder
+			};
 			System.Windows.Forms.DialogResult result = dialog.ShowDialog();
 			if (result == System.Windows.Forms.DialogResult.OK)
 			{
 				Properties.Settings.Default.ExtractedRootFolder = dialog.SelectedPath;
 			}
-			this.Focus();
+			Focus();
 		}
 
 		private void browseResFolderButton_Click(object sender, RoutedEventArgs e)
 		{
-			var dialog = new System.Windows.Forms.FolderBrowserDialog();
-			dialog.SelectedPath = Properties.Settings.Default.ResourceFolder;
+			System.Windows.Forms.FolderBrowserDialog dialog = new System.Windows.Forms.FolderBrowserDialog
+			{
+				SelectedPath = Properties.Settings.Default.ResourceFolder
+			};
 			System.Windows.Forms.DialogResult result = dialog.ShowDialog();
 			if (result == System.Windows.Forms.DialogResult.OK)
 			{
 				Properties.Settings.Default.ResourceFolder = dialog.SelectedPath;
 			}
-			this.Focus();
+			Focus();
 		}
 		private void browseListCfgFileButton_Click(object sender, RoutedEventArgs e)
 		{
-			OpenFileDialog dialog = new OpenFileDialog();
-			dialog.FileName = Properties.Settings.Default.ListCfgFile;
-			dialog.Filter = "List.cfg file|List.cfg|All Files|*.*";
+			OpenFileDialog dialog = new OpenFileDialog
+			{
+				FileName = Properties.Settings.Default.ListCfgFile,
+				Filter = "List.cfg file|List.cfg|All Files|*.*"
+			};
 			if (dialog.ShowDialog() == true)
 			{
 				Properties.Settings.Default.ListCfgFile = dialog.FileName;
@@ -74,9 +82,13 @@ namespace GDStashViewer
 		private void Window_Closed(object sender, EventArgs e)
 		{
 			if (DialogResult == true)
+			{
 				Properties.Settings.Default.Save();
+			}
 			else
+			{
 				Properties.Settings.Default.Reload();
+			}
 			//Properties.Settings.Default.Reload();
 		}
 
@@ -94,6 +106,26 @@ namespace GDStashViewer
 
 			}
 
+		}
+
+		private void browseGSTFolderButton_Click(object sender, RoutedEventArgs e)
+		{
+			CommonOpenFileDialog dialog = new CommonOpenFileDialog
+			{
+				InitialDirectory = Properties.Settings.Default.GSTFolder,
+				IsFolderPicker = true
+			};
+			if (dialog.ShowDialog() != CommonFileDialogResult.Ok)
+			{
+				return;
+			}
+			string folder = dialog.FileName;
+			Properties.Settings.Default.GSTFolder = folder;
+			string listFile = Path.Combine(Directory.GetParent(folder).FullName, "list.cfg");
+			if (File.Exists(listFile))
+			{
+				Properties.Settings.Default.ListCfgFile = listFile;
+			}
 		}
 	}
 }

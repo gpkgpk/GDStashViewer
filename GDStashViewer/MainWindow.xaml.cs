@@ -1,4 +1,7 @@
-﻿using System;
+﻿using GDStashLib;
+using GDStashViewer.Properties;
+using Microsoft.Win32;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -11,9 +14,6 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
-using GDStashLib;
-using GDStashViewer.Properties;
-using Microsoft.Win32;
 
 namespace GDStashViewer
 {
@@ -51,7 +51,9 @@ namespace GDStashViewer
 		private void Window_DragEnter(object sender, DragEventArgs e)
 		{
 			if (e.Data.GetDataPresent(DataFormats.FileDrop))
+			{
 				e.Effects = DragDropEffects.Copy;
+			}
 		}
 
 		private void Window_DragDrop(object sender, DragEventArgs e)
@@ -62,16 +64,20 @@ namespace GDStashViewer
 			Cursor = Cursors.Arrow;
 		}
 
-		private void OpenStashFiles(IEnumerable<string> filenames)
+		private void OpenStashFiles(IEnumerable<string> filenames, bool includePlayerCharacters = false)
 		{
 			Cursor = Cursors.Wait;
 			bool showErrors = true;
 			Stopwatch sw = Stopwatch.StartNew();
 			string extractBaseFolder;
 			if (string.IsNullOrEmpty(Properties.Settings.Default.ExtractedRootFolder))
+			{
 				extractBaseFolder = Path.Combine(Environment.CurrentDirectory, @"\Extracted\");
+			}
 			else
+			{
 				extractBaseFolder = Properties.Settings.Default.ExtractedRootFolder;
+			}
 
 			if (!File.Exists(Path.Combine(extractBaseFolder, @"records\items\gearweapons\axe1h\a01_axe000.dbr")))
 			{
@@ -83,9 +89,13 @@ namespace GDStashViewer
 
 			string resourceFolder;
 			if (string.IsNullOrEmpty(Properties.Settings.Default.ExtractedRootFolder))
+			{
 				resourceFolder = Path.Combine(Environment.CurrentDirectory, @"\Extracted\");
+			}
 			else
+			{
 				resourceFolder = Properties.Settings.Default.ResourceFolder;
+			}
 
 			if (!File.Exists(Path.Combine(resourceFolder, @"tags_items.txt")))
 			{
@@ -131,13 +141,17 @@ namespace GDStashViewer
 				itemList.AddRange(stash.Items);
 				AddFilesToMru(filename);
 				if (friendlyNames != null && friendlyNames.ContainsKey(key))
+				{
 					title += string.Format(" {0}-{1}", friendlyNames[key], filename);
+				}
 				else
+				{
 					title += " " + filename;
+				}
 			}
 			Title = title;
 			BuildMruMenu(friendlyNames);
-			var dontExportDict = ReadDontExportItemsList();
+			ConcurrentDictionary<string, bool> dontExportDict = ReadDontExportItemsList();
 			Parallel.ForEach(itemList, _parallelOptions, item =>
 			//foreach(var item in itemList)
 			{
@@ -148,29 +162,101 @@ namespace GDStashViewer
 					if (_urlCache.ContainsKey(key))
 					{
 						number = _urlCache[key];
-						item.Url = string.Format("https://gracefuldusk.appspot.com/items/{0}-{1}", number, System.Net.WebUtility.UrlEncode(item.EmpoweredName.Replace(' ', '-')));
+						item.Url = string.Format("http://www.grimtools.com/db/items/{0}", number);
 					}
 					else if (item.Tag == "tagMedalD002")//Badge of Mastery edge case, key wont be in dict if affixes are resolved
 					{
-						item.Url = "https://gracefuldusk.appspot.com/items/8362-Badge-of-Mastery";
+						item.Url = "http://www.grimtools.com/db/items/794";
 					}
 					string key2 = item.Tag + item.seed;
 					if (dontExportDict != null && dontExportDict.ContainsKey(key2))
+					{
 						item.DontExport = dontExportDict[key2];
+					}
 				}
 			}
 			);
 
+			if (Settings.Default.IncludePlayerCharacters)
+			{
+				//TODO: Major Cleanup
+				string savedGamesFolder = GDPlayer.GetSavedGamesDir();
+				string charsFolder = Path.Combine(savedGamesFolder, @"Grim Dawn\save\main\");
+				string errorMessage = string.Empty;
+				if (Directory.Exists(charsFolder))
+				{
+					foreach (string folder in Directory.EnumerateDirectories(charsFolder))
+					{
+						GDPlayer player = new GDPlayer();
+						string filename = Path.Combine(folder, @"player.gdc");
+						try
+						{
+							player.read(filename);
+						}
+						catch (Exception)
+						{
+							errorMessage += filename + "\r\n";
+						}
+
+						GDStash stash = new GDStash
+						{
+							FriendlyName = player.hdr.name + " (Inventory)",
+							FileName = filename,
+							Bags = new List<GDStashBag>(player.inv.Bags.Count)
+						};
+						stash.Bags.AddRange(player.inv.Bags);
+						stash.UpdateItems(extractBaseFolder, resourceFolder, Settings.Default.ListCfgFile, Settings.Default.ShouldResolveAffixes, Settings.Default.UseAlternateAffixFormat);
+						itemList.AddRange(stash.Items);
+
+						stash = new GDStash
+						{
+							FriendlyName = player.hdr.name + " (Stash)",
+							FileName = filename,
+							Bags = new List<GDStashBag>(player.stash.Bags.Count)
+						};
+						stash.Bags.AddRange(player.stash.Bags);
+						stash.UpdateItems(extractBaseFolder, resourceFolder, Settings.Default.ListCfgFile, Settings.Default.ShouldResolveAffixes, Settings.Default.UseAlternateAffixFormat);
+						itemList.AddRange(stash.Items);
+
+						stash = new GDStash
+						{
+							FriendlyName = player.hdr.name + " (Equipped)",
+							FileName = filename,
+							Bags = new List<GDStashBag>(1)
+						};
+						stash.Bags.Add(new GDStashBag());
+						stash.Bags[0].Items = new List<GDStashItem>(player.inv.equipment.Where(i => i.baseName != null));
+
+						stash.UpdateItems(extractBaseFolder, resourceFolder, Settings.Default.ListCfgFile, Settings.Default.ShouldResolveAffixes, Settings.Default.UseAlternateAffixFormat);
+						itemList.AddRange(stash.Items);
+
+						//stash.Items.AddRange(player.inv.Items);
+
+						//stash.Bags.AddRange(player.stash.Bags);
+						//stash.Items.AddRange(player.stash.Items);
+
+					}
+				}
+				if(!string.IsNullOrEmpty(errorMessage))
+				MessageBox.Show("Error Reading Character File(s) :\r\n" + errorMessage
+							+ "The file(s) may be in the old format, try Loading the character(s) in the game and exit before trying again.\r\n Program will continue", "Error Reading Character File(s)", MessageBoxButton.OK, MessageBoxImage.Warning);
+			}
+
 			itemList.Sort((item1, item2) => { return item1.Name.CompareTo(item2.Name); });
-			_collectionViewSource = new CollectionViewSource();
-			_collectionViewSource.Source = itemList;
+			_collectionViewSource = new CollectionViewSource
+			{
+				Source = itemList
+			};
 			_dataGrid.ItemsSource = _collectionViewSource.View;
 			RefreshColumnLayout();
 			sw.Stop();
-			TextBlock tb = new TextBlock();
-			tb.Text = string.Format("{0} Stash File(s) Opened at {1}. Elapsed Time: {2} seconds.", _stashes.Count, DateTime.Now.ToLocalTime().ToShortTimeString(), Math.Round(sw.Elapsed.TotalSeconds, 2));
+			TextBlock tb = new TextBlock
+			{
+				Text = string.Format("{0} Stash File(s) Opened at {1}. Elapsed Time: {2} seconds.", _stashes.Count, DateTime.Now.ToLocalTime().ToShortTimeString(), Math.Round(sw.Elapsed.TotalSeconds, 2))
+			};
 
 			//tb.ToolTip = String.Join(" , ",_stashes.Select(s => s.FileName));
+
 			StatusText.Content = tb;
 			Cursor = Cursors.Arrow;
 		}
@@ -178,17 +264,25 @@ namespace GDStashViewer
 		private void ReloadOpenStashFiles()
 		{
 			if (_stashes != null && _stashes.Any())
+			{
 				OpenStashFiles(_stashes.Select(s => s.FileName));
+			}
 		}
 
 		private void AddFilesToMru(string filename)
 		{
 			StringCollection strings = Settings.Default.FileHistory;
 			if (strings.Contains(filename))
+			{
 				strings.Remove(filename);
+			}
+
 			strings.Insert(0, filename);
 			if (strings.Count > maxMru)
+			{
 				strings.RemoveAt(20);
+			}
+
 			Settings.Default.Save();
 		}
 
@@ -232,32 +326,59 @@ namespace GDStashViewer
 		private bool TextFilter(object gdItem)
 		{
 			if (string.IsNullOrWhiteSpace(filterText.Text))
+			{
 				return true;
+			}
+
 			GDStashItem item = gdItem as GDStashItem;
 			if (item == null)
+			{
 				return false;
+			}
+
 			if (string.IsNullOrEmpty(item.Name))
+			{
 				return false;
+			}
+
 			string fieldValue = null;
 			if (fieldCombo.SelectedIndex == 0)
+			{
 				fieldValue = item.Name.ToUpper();
+			}
 			else if (fieldCombo.SelectedIndex == 1)
+			{
 				fieldValue = item.Category.ToUpper();
+			}
 			else if (fieldCombo.SelectedIndex == 2)
+			{
 				fieldValue = item.SubCategory.ToUpper();
+			}
+
 			if (string.IsNullOrEmpty(fieldValue))
+			{
 				return false;
+			}
 
 			string searchTerm = filterText.Text.ToUpper();
 			//switch case can suck it
 			if ((filterCombo.SelectedIndex == 0) && (fieldValue.Contains(searchTerm)))
+			{
 				return true;
+			}
 			else if ((filterCombo.SelectedIndex == 1) && (fieldValue.StartsWith(searchTerm)))
+			{
 				return true;
+			}
 			else if ((filterCombo.SelectedIndex == 2) && (fieldValue.EndsWith(searchTerm)))
+			{
 				return true;
+			}
 			else if ((filterCombo.SelectedIndex == 3) && (fieldValue.Equals(searchTerm, StringComparison.CurrentCultureIgnoreCase)))
+			{
 				return true;
+			}
+
 			return false;
 		}
 
@@ -286,10 +407,16 @@ namespace GDStashViewer
 			//_collectionViewSource.View.Refresh();
 
 			if (Settings.Default.FilterHistory.Contains(filterText.Text))
+			{
 				return;
+			}
+
 			Settings.Default.FilterHistory.Insert(0, filterText.Text);
 			if (Settings.Default.FilterHistory.Count > maxFilterHistory)
+			{
 				Settings.Default.FilterHistory.RemoveAt(10);
+			}
+
 			Settings.Default.Save();
 			filterText.Items.Refresh();
 		}
@@ -297,7 +424,9 @@ namespace GDStashViewer
 		private void filterButtonClear_Click(object sender, RoutedEventArgs e)
 		{
 			if (_collectionViewSource.View == null)
+			{
 				return;
+			}
 
 			//_collectionViewSource.View.Filter = null;
 			//_collectionViewSource.View.Refresh();
@@ -312,14 +441,21 @@ namespace GDStashViewer
 				MessageBox.Show("No items to export, please load a stash file containing items or change data filters", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
 				return;
 			}
-			SaveFileDialog dlg = new SaveFileDialog();
-			dlg.Filter = "Text Files|*.txt|All Files|*.*";
-			dlg.Title = "Export (filtered) Data as Text File";
+			SaveFileDialog dlg = new SaveFileDialog
+			{
+				Filter = "Text Files|*.txt|All Files|*.*",
+				Title = "Export (filtered) Data as Text File"
+			};
 			if (dlg.ShowDialog() != true)
+			{
 				return;
-			ExportToTextFile(dlg.FileName);
-			Hyperlink link = new Hyperlink(new Run(dlg.FileName));
-			link.NavigateUri = new System.Uri(dlg.FileName, UriKind.Absolute);
+			}
+
+			GDExporter.ExportToTextFile(dlg.FileName, _collectionViewSource);
+			Hyperlink link = new Hyperlink(new Run(dlg.FileName))
+			{
+				NavigateUri = new System.Uri(dlg.FileName, UriKind.Absolute)
+			};
 			link.RequestNavigate += (ls, le) =>
 			{
 				System.Diagnostics.Process.Start(le.Uri.ToString());
@@ -331,130 +467,13 @@ namespace GDStashViewer
 			StatusText.Content = sp;
 		}
 
-		private void ExportToTextFile(string filename)
-		{
-			using (StreamWriter exportFile = File.CreateText(filename))
-			{
-				if (!Settings.Default.ExportShouldIgnoreGrouping && _collectionViewSource.View.Groups != null && _collectionViewSource.View.Groups.Count > 1)
-				{
-					foreach (CollectionViewGroup group in _collectionViewSource.View.Groups)
-					{
-						ExportGroup(exportFile, group, 0);
-					}
-				}
-				else // no groups or ignored, export flat list
-				{
-					List<GDStashItem> itemList = itemList = _collectionViewSource.View.OfType<GDStashItem>().ToList();
-					ExportItems(exportFile, itemList, 0);
-				}
-			}
-		}
-
-		private void ExportItems(StreamWriter exportFile, IEnumerable<GDStashItem> itemList, int indentLevel)
-		{
-			if (!Settings.Default.ExportShouldIgnoreDontExport)
-				itemList = itemList.Where(i => !i.DontExport);// drop items that are marked as DontExport
-			string duplicateCount = string.Empty;
-			//ignore dupes, so get distinct items and update duplicate count prop on 1st item of dupes
-			if (Settings.Default.ExportShouldIgnoreDuplicates)
-			{
-				var itemListCount = itemList.GroupBy(i => i, new GDStashItemComparer())
-										.Select(g => new { Item = g.Key, Count = g.Count() });
-
-				itemList = itemList.Distinct(new GDStashItemComparer()).ToList();
-				foreach (var ic in itemListCount)
-				{
-					ic.Item.Count = ic.Count;
-				}
-			}
-			foreach (GDStashItem item in itemList)
-			{
-				if (string.IsNullOrEmpty(item.Name))
-					break;
-
-				duplicateCount = string.Empty;
-				if (Settings.Default.ExportShouldIgnoreDuplicates && item.Count > 1)
-				{
-					duplicateCount = "*" + item.Count;
-				}
-
-				ExportSingleItem(exportFile, item, indentLevel, duplicateCount);
-			}
-		}
-
-		private void ExportSingleItem(StreamWriter exportFile, GDStashItem item, int indentLevel, string duplicateCount)
-		{
-			indentLevel++;
-			string itemName;
-			if (item.Tier == 1)
-				itemName = item.Name + " - Empowered";
-			if (item.Tier == 2)
-				itemName = item.Name + " - Mythical";
-			else
-				itemName = item.Name;
-			if (Settings.Default.ExportUseIndent)
-				for (int i = 0; i < indentLevel; i++)
-					exportFile.Write(" ");
-
-			exportFile.WriteLine(string.Format(Settings.Default.ExportFormat, itemName, item.Category, item.SubCategory, item.LevelRequirement, duplicateCount, item.Url));
-		}
-
-		//sloppy-ish recursion, but meh
-		public void ExportGroup(StreamWriter exportFile, CollectionViewGroup exportGroup, int indentLevel)
-		{
-			if (Settings.Default.ExportUseIndent)
-				for (int i = 0; i < indentLevel; i++)
-					exportFile.Write(" ");
-			exportFile.WriteLine(string.Format(Settings.Default.ExportGroupFormat, exportGroup.Name, exportGroup.ItemCount, "\r\n"));
-			string lastItemName = string.Empty;
-			bool hasOnlyItems = exportGroup.Items.Where(i => i is CollectionViewGroup).Count() == 0; // LINQ Any has issues when casting to CVG so use where and count
-
-			if (hasOnlyItems)
-			{
-				List<GDStashItem> itemList = exportGroup.Items.Cast<GDStashItem>().ToList();
-				ExportItems(exportFile, itemList, indentLevel);
-			}
-			else
-			{
-				foreach (Object obj in exportGroup.Items)
-				{
-					CollectionViewGroup group = obj as CollectionViewGroup;
-					if (group != null)
-						ExportGroup(exportFile, group, indentLevel + 1);
-					else// edge case for ungrouped items; this should never be possible
-					{
-						GDStashItem item = obj as GDStashItem;
-						if (item != null && !string.IsNullOrEmpty(item.Name))
-						{
-							string itemName;
-							if (item.Tier == 1)
-								itemName = item.Name + " - Empowered";
-							if (item.Tier == 2)
-								itemName = item.Name + " - Mythical";
-							else
-								itemName = item.Name;
-							if ((!Settings.Default.ExportShouldIgnoreDuplicates) || (Settings.Default.ExportShouldIgnoreDuplicates && lastItemName != itemName))
-							{
-								ExportSingleItem(exportFile, item, indentLevel, string.Empty);
-							}
-							lastItemName = itemName;
-						}
-					}
-				}
-			}
-			if (!string.IsNullOrEmpty(Settings.Default.ExportGroupFooterFormat))
-			{
-				if (Settings.Default.ExportUseIndent)
-					for (int i = 0; i < indentLevel; i++)
-						exportFile.Write(" ");
-				exportFile.WriteLine(string.Format(Settings.Default.ExportGroupFooterFormat, exportGroup.Name, exportGroup.ItemCount, "\r\n"));
-			}
-		}
 
 		private void settingsButton_Click(object sender, RoutedEventArgs e)
 		{
-			SettingsWindow settingsWindow = new SettingsWindow();
-			settingsWindow.Owner = this;
+			SettingsWindow settingsWindow = new SettingsWindow
+			{
+				Owner = this
+			};
 			settingsWindow.ShowDialog();
 		}
 
@@ -463,9 +482,15 @@ namespace GDStashViewer
 			Properties.Settings.Default.Reload();
 			Title = _defaultTitle;
 			if (Settings.Default.FilterHistory == null)
+			{
 				Settings.Default.FilterHistory = new System.Collections.Specialized.StringCollection();
+			}
+
 			if (Settings.Default.FileHistory == null)
+			{
 				Settings.Default.FileHistory = new System.Collections.Specialized.StringCollection();
+			}
+
 			filterText.ItemsSource = Settings.Default.FilterHistory;
 
 			Settings.Default.FileHistory.Remove("<none>");
@@ -474,7 +499,7 @@ namespace GDStashViewer
 			{
 				friendlyNames = GDStash.GetFriendlyNames(Properties.Settings.Default.ListCfgFile);
 			}
-			BuildUrlCache(Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), "GracefulDuskLinks.txt"));
+			BuildUrlCache(Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), "ItemLinks.csv"));
 			BuildMruMenu(friendlyNames);
 			string[] args = Environment.GetCommandLineArgs();
 			if (args != null && args.Length > 1)
@@ -482,13 +507,14 @@ namespace GDStashViewer
 				//1st arg is self, so skip first
 				OpenStashFiles(args.Skip(1).Take(args.Length - 1));
 			}
+
 		}
 
 		private void BuildUrlCache(string filename)
 		{
 			//if (Settings.Default.ExportShouldUseUrl && _urlCache == null)
 			//{
-			_urlCache = new ConcurrentDictionary<int, int>(Environment.ProcessorCount, 3025);
+			_urlCache = new ConcurrentDictionary<int, int>(Environment.ProcessorCount, 3400);
 			using (StreamReader reader = File.OpenText(filename))
 			{
 				string line;
@@ -498,11 +524,13 @@ namespace GDStashViewer
 				while (!reader.EndOfStream)
 				{
 					line = reader.ReadLine();
-					splitPos = line.IndexOf('=');
+					splitPos = line.IndexOf(',');
 					number = line.Substring(0, splitPos);
 					nameHash = line.Substring(splitPos + 1).ToLower().GetHashCode();
 					if (!_urlCache.ContainsKey(nameHash))
+					{
 						_urlCache.TryAdd(nameHash, int.Parse(number));
+					}
 				}
 			}
 			//}
@@ -541,12 +569,16 @@ namespace GDStashViewer
 				MessageBox.Show("No items to export", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning);
 				return;
 			}
-			SaveFileDialog dlg = new SaveFileDialog();
-			dlg.Filter = "Csv Files|*.Csv|Text Files|*.txt|All Files|*.*";
-			dlg.Title = "Export Data as Comma Separated Values";
+			SaveFileDialog dlg = new SaveFileDialog
+			{
+				Filter = "Csv Files|*.Csv|Text Files|*.txt|All Files|*.*",
+				Title = "Export Data as Comma Separated Values"
+			};
 
 			if (dlg.ShowDialog() != true)
+			{
 				return;
+			}
 
 			try
 			{
@@ -561,11 +593,16 @@ namespace GDStashViewer
 
 		private void OpenCmdExecuted(object sender, ExecutedRoutedEventArgs e)
 		{
-			OpenFileDialog dlg = new OpenFileDialog();
-			dlg.Title = "Select one or more GD Stash File(s) to load (default is 'Transfer.gst'; GD Stash Manager doesn't use .GST extension for its files)";
-			dlg.Multiselect = true;
+			OpenFileDialog dlg = new OpenFileDialog
+			{
+				Title = "Select one or more GD Stash File(s) to load (default is 'Transfer.gst'; GD Stash Manager doesn't use .GST extension for its files)",
+				Multiselect = true
+			};
 			if (dlg.ShowDialog() != true)
+			{
 				return;
+			}
+
 			OpenStashFiles(dlg.FileNames);
 		}
 
@@ -581,16 +618,18 @@ namespace GDStashViewer
 
 		public void OpenAllListCfgStashes()
 		{
-			if (!File.Exists(Settings.Default.ListCfgFile))
+			string gstFolder = Settings.Default.GSTFolder;
+			if (!Directory.Exists(gstFolder))
 			{
-				MessageBox.Show("Please Configure Settings to point to a valid 'List.cfg' from the  GD Stash Manager's folder", "Error: List.cfg not found", MessageBoxButton.OK, MessageBoxImage.Error);
+				MessageBox.Show("Please Configure Settings to point to a valid folder containing the *.GST files (or GD Stash Manager's GST folder)", "Error: *.GST Folder not found", MessageBoxButton.OK, MessageBoxImage.Error);
 				return;
 			}
-			string gstFolder = Path.Combine(Path.GetDirectoryName(Settings.Default.ListCfgFile), @"gst\");
-			var fileNames = GDStash.GetFriendlyNames(Settings.Default.ListCfgFile).Keys.ToList();
-			fileNames = fileNames.Select(s => s = Path.Combine(gstFolder, s)).ToList();
-			OpenStashFiles(fileNames);
-			Title = _defaultTitle + " All GD Stash Manager Stashes (List.cfg)";
+
+
+			//List<string> fileNames = GDStash.GetFriendlyNames(Settings.Default.ListCfgFile).Keys.ToList();
+			//fileNames = fileNames.Select(s => s = Path.Combine(gstFolder, s)).ToList();
+			OpenStashFiles(Directory.GetFiles(gstFolder, "*.gst"));
+			Title = _defaultTitle + " All GD Stash Manager Stashes in Folder";
 		}
 
 		private void menuOpenList_Click(object sender, RoutedEventArgs e)
@@ -612,7 +651,9 @@ namespace GDStashViewer
 		private void menuOpenFolder_Click(object sender, RoutedEventArgs e)
 		{
 			if (_stashes != null && _stashes.Any())
+			{
 				System.Diagnostics.Process.Start(Path.GetDirectoryName(_stashes[0].FileName));
+			}
 		}
 
 		protected override void OnPreviewMouseWheel(MouseWheelEventArgs args)
@@ -663,16 +704,18 @@ namespace GDStashViewer
 		{
 			Hyperlink link = (Hyperlink)e.OriginalSource;
 			if (link.NavigateUri != null)
+			{
 				Process.Start(link.NavigateUri.AbsoluteUri);
+			}
 		}
 
 		public void WriteDontExportItemsList()
 		{
-			using (var f = File.CreateText(DontExportFilename))
+			using (StreamWriter f = File.CreateText(DontExportFilename))
 			{
 				foreach (GDStash stash in _stashes)
 				{
-					foreach (var item in stash.Items.Where(i => i.DontExport))
+					foreach (GDStashItem item in stash.Items.Where(i => i.DontExport))
 					{
 						f.Write("True,");
 						f.WriteLine(item.Tag + item.seed);
@@ -685,13 +728,15 @@ namespace GDStashViewer
 		public ConcurrentDictionary<string, bool> ReadDontExportItemsList()
 		{
 			if (!File.Exists(DontExportFilename))
+			{
 				return null;
+			}
+
 			ConcurrentDictionary<string, bool> dontExportDict = new ConcurrentDictionary<string, bool>();
 			string line;
-			bool dontExport;
 
 			string[] parts;
-			using (var f = File.OpenText(DontExportFilename))
+			using (StreamReader f = File.OpenText(DontExportFilename))
 			{
 				while (!f.EndOfStream)
 				{
@@ -699,7 +744,7 @@ namespace GDStashViewer
 					parts = line.Split(',');
 					if (parts != null && parts.Length == 2)
 					{
-						bool.TryParse(parts[0], out dontExport);
+						bool.TryParse(parts[0], out bool dontExport);
 						dontExportDict.TryAdd(parts[1], dontExport);
 					}
 				}
@@ -725,9 +770,11 @@ namespace GDStashViewer
 				if (cfgEntryRecord.Length > 2)
 				{
 					filename = cfgEntryRecord[0];
-					Array.ForEach(Path.GetInvalidFileNameChars(), c => filename = filename.Replace(c.ToString(), String.Empty));
+					Array.ForEach(Path.GetInvalidFileNameChars(), c => filename = filename.Replace(c.ToString(), string.Empty));
 					if (!listCfgNames.ContainsValue(filename))
+					{
 						listCfgNames.Add(cfgEntryRecord[2], filename + ".gst");
+					}
 					else//name collision, unlikely
 					{
 						filename += cfgEntryRecord[0].GetHashCode();
@@ -763,7 +810,10 @@ namespace GDStashViewer
 			}
 			listCfgFileContents = "";
 			foreach (string cfgEntry in cfgList)
+			{
 				listCfgFileContents += cfgEntry + '®';
+			}
+
 			File.WriteAllText(Settings.Default.ListCfgFile, listCfgFileContents);
 		}
 	}

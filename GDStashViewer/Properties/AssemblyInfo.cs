@@ -6,11 +6,11 @@ using System.Windows;
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
 [assembly: AssemblyTitle("GDStashViewer")]
-[assembly: AssemblyDescription("Grim Dawn Stash Viewer and Finder")]
+[assembly: AssemblyDescription("Grim Dawn Stash Viewer,Finder and Trade List Exporter")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("gpk")]
 [assembly: AssemblyProduct("GDStashViewer")]
-[assembly: AssemblyCopyright("Copyright ©  2016")]
+[assembly: AssemblyCopyright("Copyright ©  2017-2019")]
 [assembly: AssemblyTrademark("gpk")]
 [assembly: AssemblyCulture("")]
 
@@ -47,5 +47,5 @@ using System.Windows;
 // You can specify all the values or you can default the Build and Revision Numbers
 // by using the '*' as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("0.7.6.0")]
-[assembly: AssemblyFileVersion("0.7.6.0")]
+[assembly: AssemblyVersion("0.8.0.2")]
+[assembly: AssemblyFileVersion("0.8.0.2")]

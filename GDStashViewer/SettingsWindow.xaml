@@ -21,6 +21,7 @@
 						<RowDefinition Height="auto" />
 						<RowDefinition Height="auto" />
 						<RowDefinition Height="auto" />
+						<RowDefinition Height="auto" />
 						<RowDefinition Height="*" />
 						<RowDefinition Height="auto" />
 					</Grid.RowDefinitions>
@@ -45,12 +46,12 @@
 					<TextBox Grid.Row="2" Text="{Binding Source={x:Static properties:Settings.Default}, Path=ItemTagFile}" />
 					<Button x:Name="browseFileButton" Grid.Row="2" Grid.Column="3" MinWidth="20" Margin="0,2,2,2" HorizontalAlignment="Right" Click="browseItemTagFileButton_Click" Content="..." />-->
 
-					<TextBlock Grid.Row="3" Margin="2,4" Text="(Optional) Location GD StashManager's List.cfg file" />
-					<TextBox Grid.Row="3" Text="{Binding Source={x:Static properties:Settings.Default}, Path=ListCfgFile}" />
+					<TextBlock Grid.Row="3" Margin="2,4" Text="Folder containing *.GST files (GD StashManager's 'GST' Folder) (optional) " />
+					<TextBox Grid.Row="3" Text="{Binding Source={x:Static properties:Settings.Default}, Path=GSTFolder}" />
 					<CheckBox Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="4" Margin="2" Content="Resolve Item Affixes (Prefix and Suffix) for all items" IsChecked="{Binding Source={x:Static properties:Settings.Default}, Path=ShouldResolveAffixes}" />
 					<CheckBox Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="4" Margin="2" Content="Use Alternate Formatting for Item Affixes e.g. 'Item Name,Prefix,Affix'" IsChecked="{Binding Source={x:Static properties:Settings.Default}, Path=UseAlternateAffixFormat}" />
-
-					<Button x:Name="browseListCfgFileButton" Grid.Row="3" Grid.Column="3" MinWidth="20" Margin="0,2,2,2" HorizontalAlignment="Right" Click="browseListCfgFileButton_Click" Content="..." />
+					<CheckBox Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="4" Margin="2" Content="Include Player Characters's Stash,Inventory and Equipment" IsChecked="{Binding Source={x:Static properties:Settings.Default}, Path=IncludePlayerCharacters}" />
+					<Button x:Name="browseListCfgFileButton" Grid.Row="3" Grid.Column="3" MinWidth="20" Margin="0,2,2,2" HorizontalAlignment="Right" Click="browseGSTFolderButton_Click" Content="..." VerticalAlignment="Center" />
 				</Grid>
 			</TabItem>
 			<TabItem Header="Export">

@@ -52,7 +52,7 @@ namespace GDStashLib
 					return "Empowered";
 				else if (Tier == 3)
 					return "Mythical";
-				return null;
+				return "";
 			}
 		}
 
@@ -78,6 +78,7 @@ namespace GDStashLib
 					return ParentStash.FileName ?? null;
 			}
 		}
+
 
 		public String FriendlyName
 		{
@@ -127,10 +128,10 @@ namespace GDStashLib
 				if (_EmpoweredName == null)
 				{
 					string itemName;
-					if (Tier == 1)
-						itemName = Name + " - Empowered";
 					if (Tier == 2)
-						itemName = Name + " - Mythical";
+						itemName = "Empowered "+Name;
+					if (Tier == 3)
+						itemName = "Mythical "+Name;
 					else
 						itemName = Name;
 					_EmpoweredName = itemName;
@@ -142,30 +143,46 @@ namespace GDStashLib
 		public int Count { get; set; }
 		public String Url { get; set; }
 
-		internal void Read(GDStash stash)
+		internal void Read(GDBlockReader gdbr, bool isInventory = false)
 		{
-			baseName = stash.read_str();
+			baseName = gdbr.read_str();
+			if (!string.IsNullOrEmpty(baseName))
+			{ 
 			string folder = Path.GetDirectoryName(baseName);
 			_DbrFileName = Path.GetFileNameWithoutExtension(baseName);
 			_SubCategory = folder.Substring(folder.LastIndexOf('\\') + 1).Replace("gear", String.Empty);
 			folder = folder.Substring(0, folder.LastIndexOf('\\') - 1);
 			_Category = folder.Substring(folder.LastIndexOf('\\') + 1).Replace("gear", String.Empty);
-
-			prefixName = stash.read_str();
-			suffixName = stash.read_str();
-			modifierName = stash.read_str();
-			transmuteName = stash.read_str();
-			seed = stash.read_int();
-			relicName = stash.read_str();
-			relicBonus = stash.read_str();
-			relicSeed = stash.read_int();
-			augmentName = stash.read_str();
-			unknown = stash.read_int();
-			augmentSeed = stash.read_int();
-			var1 = stash.read_int();
-			stackCount = stash.read_int();
-			xOffset = stash.read_float();
-			yOffset = stash.read_float();
+			}
+			else
+			{
+				//System.Diagnostics.Debugger.Break();
+			}
+			prefixName = gdbr.read_str();
+			suffixName = gdbr.read_str();
+			modifierName = gdbr.read_str();
+			transmuteName = gdbr.read_str();
+			seed = gdbr.read_int();
+			relicName = gdbr.read_str();
+			relicBonus = gdbr.read_str();
+			relicSeed = gdbr.read_int();
+			augmentName = gdbr.read_str();
+			unknown = gdbr.read_int();
+			augmentSeed = gdbr.read_int();
+			var1 = gdbr.read_int();
+			stackCount = gdbr.read_int();
+			if(isInventory)
+			{
+				//uint n=gdbr.read_int();
+				//xOffset = n;
+				//n=gdbr.read_int();
+				//yOffset = n;
+			}
+			else
+			{
+				xOffset = gdbr.read_float();
+				yOffset = gdbr.read_float();
+			}
 		}
 
 		public override string ToString()

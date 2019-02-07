@@ -50,6 +50,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="GDBlockReader.cs" />
     <Compile Include="GDPlayer.cs" />
     <Compile Include="GDStashItem.cs" />
     <Compile Include="GDStash.cs" />

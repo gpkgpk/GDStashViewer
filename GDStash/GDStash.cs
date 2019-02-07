@@ -12,25 +12,16 @@ Thanks to that author (whoever he is!) and Mamba for pointing me to it.
 
 namespace GDStashLib
 {
-	internal struct GDBlock
-	{
-		internal UInt32 len;
-		internal UInt32 end;
-	};
 
 	public class GDStash
 	{
 		//internal Dictionary<string, string> _listCfgNames = new Dictionary<string, string>();
-		internal UInt32 _key;
-
-		internal UInt32[] _table = new UInt32[256];
 		internal string mod;
-		public string FileName { get; internal set; }
-		public string FriendlyName { get; internal set; }
-
-		internal BinaryReader _file;
-
-		public List<GDStashBag> Bags { get; internal set; }
+		public string FileName { get; set; }
+		public string FriendlyName { get; set; }
+		public GDBlock _GDBlock=new GDBlock();
+		public GDBlockReader BlockReader { get; set; }
+		public List<GDStashBag> Bags { get; set; }
 
 		private List<GDStashItem> _Items;
 
@@ -58,131 +49,46 @@ namespace GDStashLib
 			}
 		}
 
-		internal void read_key()
-		{
-			UInt32 k = _file.ReadUInt32();
-			k ^= 0x55555555;
-			_key = k;
-
-			for (UInt32 i = 0; i < 256; i++)
-			{
-				k = (k >> 1) | (k << 31);
-				k *= 39916801;
-				_table[i] = k;
-			}
-		}
-
-		internal void update_key(byte[] b)
-		{
-			for (int i = 0; i < b.Length; i++)
-			{
-				_key ^= _table[b[i]];
-			}
-		}
-
-		private UInt32 next_int()
-		{
-			UInt32 ret = _file.ReadUInt32();
-			ret ^= _key;
-
-			return ret;
-		}
-
-		internal UInt32 read_int()
-		{
-			UInt32 val = _file.ReadUInt32();
-			UInt32 ret = val ^ _key;
-			update_key(BitConverter.GetBytes(val));
-			return ret;
-		}
-
-		internal byte read_byte()
-		{
-			byte val = _file.ReadByte();
-			byte ret = (byte)(val ^ _key);
-			byte[] bytes = new byte[1];
-			bytes[0] = val;
-			update_key(bytes);
-			return ret;
-		}
-
-		internal float read_float()
-		{
-			UInt32 i = read_int();
-			byte[] bytes = BitConverter.GetBytes(i);
-			float f = BitConverter.ToSingle(bytes, 0);
-			return f;
-		}
-
-		internal string read_str()
-		{
-			UInt32 len = read_int();
-			if (len == 0)
-				return null;
-			byte[] bytes = new byte[len];
-			for (UInt32 i = 0; i < len; i++)
-			{
-				bytes[i] = read_byte();
-			}
-			string str = System.Text.Encoding.UTF8.GetString(bytes);
-			return str;
-		}
-
-		internal UInt32 read_block_start(ref GDBlock b)
-		{
-			UInt32 ret = read_int();
-			b.len = next_int();
-			b.end = (UInt32)_file.BaseStream.Position + b.len;
-
-			return ret;
-		}
-
-		internal void read_block_end(ref GDBlock b)
-		{
-			if ((UInt32)_file.BaseStream.Position != b.end)
-				throw new IOException();
-
-			if (next_int() != 0)
-				throw new IOException();
-		}
+		
 
 		public void Open(string filename)
 		{
-			using (_file = new BinaryReader(File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.Read), ASCIIEncoding.ASCII))
+		BlockReader = new GDBlockReader();
+			using (BlockReader.File = new BinaryReader(File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.Read), ASCIIEncoding.ASCII))
 			{
 				FileName = filename;
 				UInt32 n, ver;
-				read_key();
+				BlockReader.read_key();
 
-				if (read_int() != 2)
+				if (BlockReader.read_int() != 2)
 					throw new IOException();
 
 				GDBlock b = new GDBlock();
 
-				if (read_block_start(ref b) != 18)
+				if (BlockReader.read_block_start(ref b) != 18)
 					throw new IOException();
-				ver = read_int();
+				ver = BlockReader.read_int();
 				if (ver < 4) // version
 					throw new IOException("Version Mismatch <4");
-				n = next_int();
+				n = BlockReader.next_int();
 				if (n != 0)
 					throw new IOException();
 
-				mod = read_str();
+				mod = BlockReader.read_str();
 				if (ver >= 5)
-					read_byte();
-				n = read_int();
+					BlockReader.read_byte();
+				n = BlockReader.read_int();
 				Bags = new List<GDStashBag>((int)n);
 
 				for (int i = 0; i < n; i++)
 				{
 					GDStashBag bag = new GDStashBag();
-					bag.Read(this);
+					bag.Read(this.BlockReader,this);
 					bag.Index = i;
 					Bags.Add(bag);
 				}
 
-				read_block_end(ref b);
+				BlockReader.read_block_end(ref b);
 			}
 		}
 
@@ -214,26 +120,48 @@ namespace GDStashLib
 			return tags;
 		}
 
-		public void UpdateItems(string extractBaseFolder, string ResourceFolder, string listCfgFile, bool shouldResolveAffixes, bool useAlternateAffixFormat)
+		internal Dictionary<string, string> _tagsItems;
+		internal Dictionary<string, string> _tagsSkillsNames;
+		internal Dictionary<string, string> _fields;
+
+		internal struct ItemFields
+		{
+			public string itemNameTag;
+			public string description;
+			public string itemStyleTag;
+			public string levelRequirement;
+			public string itemClassification;
+		}
+
+		internal Dictionary<string, ItemFields> _itemFieldsCache = new Dictionary<string, ItemFields>();
+
+		public void Initialize(string extractBaseFolder, string ResourceFolder)
 		{
 			string tagsItemsFile = Path.Combine(ResourceFolder, @"tags_items.txt");
 			string tagsSkillsFile = Path.Combine(ResourceFolder, @"tags_skills.txt");
-			Dictionary<string, string> tagsItems = ReadTags(tagsItemsFile, null);
-			Dictionary<string, string> tagsSkillsNames = ReadTags(tagsSkillsFile, "SkillName");
+			_tagsItems = ReadTags(tagsItemsFile, null);
+			_tagsSkillsNames = ReadTags(tagsSkillsFile, "SkillName");
 
 			string tagsItemsGdx1File = Path.Combine(ResourceFolder, @"tagsgdx1_items.txt");
-			if(File.Exists(tagsItemsGdx1File))
+			if (File.Exists(tagsItemsGdx1File))
 			{
 				Dictionary<string, string> tagsGdx1Items = ReadTags(tagsItemsGdx1File, null);
-				tagsItems = tagsItems.Union(tagsGdx1Items).ToDictionary(k => k.Key, v => v.Value);
+				_tagsItems = _tagsItems.Union(tagsGdx1Items).ToDictionary(k => k.Key, v => v.Value);
 
 			}
 			string tagsSkillsGdx1File = Path.Combine(ResourceFolder, @"tagsgdx1_skills.txt");
 			if (File.Exists(tagsSkillsGdx1File))
 			{
 				Dictionary<string, string> tagsGdx1SkillsNames = ReadTags(tagsSkillsGdx1File, "SkillName");
-				tagsSkillsNames = tagsSkillsNames.Union(tagsGdx1SkillsNames).ToDictionary(k => k.Key, v => v.Value);
+				_tagsSkillsNames = _tagsSkillsNames.Union(tagsGdx1SkillsNames).ToDictionary(k => k.Key, v => v.Value);
 			}
+
+		}
+
+		public void UpdateItems(string extractBaseFolder, string ResourceFolder, string listCfgFile, bool shouldResolveAffixes, bool useAlternateAffixFormat)
+		{
+			if (_tagsItems == null)
+				Initialize(extractBaseFolder, ResourceFolder);
 			if (!String.IsNullOrEmpty(listCfgFile) && File.Exists(listCfgFile))
 			{
 				var friendlyNames = GetFriendlyNames(listCfgFile);
@@ -244,60 +172,45 @@ namespace GDStashLib
 			foreach (GDStashItem item in Items)
 			{
 				string itemNameTag = null;
-				//item.IsEmpowered = false;
-				//string itemClass = null;
-				//StreamReader dbrFile = File.OpenText(filename);
-				//while (!dbrFile.EndOfStream && (itemNameTag == null || itemClass == null || item.IsEmpowered || item.LevelRequirement == 0))
-				//{
-				//	line = dbrFile.ReadLine();
-				//	if (line.Length > 0 && line[0] != '#')
-				//	{
-				//		parts = line.Split(',');
-				//		if (parts.Length == 3)
-				//		{
-				//			string fieldName = parts[0];
-				//			string fieldValue = parts[1];
-				//			if (fieldName == "itemNameTag" || fieldName == "description")
-				//			{
-				//				itemNameTag = fieldValue;
-				//			}
-
-				//			if (fieldName == "itemStyleTag" && fieldValue == "tagStyleUniqueTier2")
-				//			{
-				//				item.IsEmpowered = true;
-				//			}
-				//			if (fieldName == "levelRequirement")
-				//			{
-				//				item.LevelRequirement = int.Parse(fieldValue);
-				//			}
-				//			if (fieldName == "itemClassification")
-				//			{
-				//				GDStashItem.ItemClassification itemClassification = GDStashItem.ItemClassification.Unknown;
-				//				if (!Enum.TryParse<GDStashItem.ItemClassification>(fieldValue, true, out itemClassification))
-				//					itemClassification = GDStashItem.ItemClassification.Unknown;
-				//				item.Class = itemClassification;
-				//			}
-				//		}
-				//	}
-				//}
 				string dbrFilename = Path.Combine(extractBaseFolder, item.baseName);
+				string itemClassificationStr;
+				ItemFields itemFields;
+
 				if (!File.Exists(dbrFilename))
 					break;
-				Dictionary<string, string> fields = GetFieldValuesFromDbr(extractBaseFolder, item.baseName, new string[] { "itemNameTag", "description", "itemStyleTag", "levelRequirement", "itemClassification" }, false);
-				if (fields["itemNameTag"] != null)
-					itemNameTag = fields["itemNameTag"];
+				if (!_itemFieldsCache.ContainsKey(item.baseName))
+				{
+					Dictionary<string, string> fields = GetFieldValuesFromDbr(extractBaseFolder, item.baseName, new string[] { "itemNameTag", "description", "itemStyleTag", "levelRequirement", "itemClassification" }, false);
+
+					itemFields.itemNameTag = fields["itemNameTag"];
+					itemFields.description = fields["description"];
+					itemFields.itemStyleTag = fields["itemStyleTag"];
+					itemFields.levelRequirement = fields["levelRequirement"];
+					itemFields.itemClassification = fields["itemClassification"];
+					_itemFieldsCache.Add(item.baseName, itemFields);
+
+				}
 				else
-					itemNameTag = fields["description"];
-				if (fields["itemStyleTag"] == "tagStyleUniqueTier2")
-					item.Tier= 2;
-				if (fields["itemStyleTag"] == "tagStyleUniqueTier3")
+				{
+					itemFields = _itemFieldsCache[item.baseName];
+				}
+
+				if (itemFields.itemNameTag != null)
+					itemNameTag = itemFields.itemNameTag;
+				else
+					itemNameTag = itemFields.description;
+				if (itemFields.itemStyleTag == "tagStyleUniqueTier2")
+					item.Tier = 2;
+				if (itemFields.itemStyleTag == "tagStyleUniqueTier3")
 					item.Tier = 3;
+				itemClassificationStr = itemFields.itemClassification;
 				int lev;
-				if (int.TryParse(fields["levelRequirement"], out lev))
+				if (int.TryParse(itemFields.levelRequirement, out lev))
 					item.LevelRequirement = lev;
 
+
 				GDStashItem.ItemClassification itemClassification = GDStashItem.ItemClassification.Unknown;
-				if (!Enum.TryParse<GDStashItem.ItemClassification>(fields["itemClassification"], true, out itemClassification))
+				if (!Enum.TryParse<GDStashItem.ItemClassification>(itemClassificationStr, true, out itemClassification))
 					itemClassification = GDStashItem.ItemClassification.Unknown;
 				item.Class = itemClassification;
 				if (item.DbrFileName == "q000_torso")// Gazer Man!
@@ -306,9 +219,9 @@ namespace GDStashLib
 					item.SubCategory = "torso";
 				}
 
-				if (itemNameTag != null && tagsItems.ContainsKey(itemNameTag))
+				if (itemNameTag != null && _tagsItems.ContainsKey(itemNameTag))
 				{
-					item.Name = tagsItems[itemNameTag].Replace("^k", String.Empty);
+					item.Name = _tagsItems[itemNameTag].Replace("^k", String.Empty);
 					item.Tag = itemNameTag;
 
 					try //supress exceptions unless debugging
@@ -321,9 +234,9 @@ namespace GDStashLib
 							string skillName2;
 							string skillNameTag;
 							GetAffixValues(extractBaseFolder, item.prefixName, out skillLevel1, out skillNameTag);
-							skillName1 = tagsSkillsNames[skillNameTag];
+							skillName1 = _tagsSkillsNames[skillNameTag];
 							GetAffixValues(extractBaseFolder, item.suffixName, out skillLevel2, out skillNameTag);
-							skillName2 = tagsSkillsNames[skillNameTag];
+							skillName2 = _tagsSkillsNames[skillNameTag];
 							if (skillName1 == skillName2)// super badge of mastery w/ same skills in prefix and suffix. Damn you TomoDaK for requesting this!
 							{
 								item.Name += String.Format(" +{0} {1}", skillLevel1 + skillLevel2, skillName1);
@@ -340,14 +253,14 @@ namespace GDStashLib
 							if (!string.IsNullOrEmpty(item.prefixName))
 							{
 								string nameTag = GetFieldValueFromDbr(extractBaseFolder, item.prefixName, "lootRandomizerName");
-								if (tagsItems.ContainsKey(nameTag))
-									prefix = tagsItems[nameTag];
+								if (_tagsItems.ContainsKey(nameTag))
+									prefix = _tagsItems[nameTag];
 							}
 							if (!string.IsNullOrEmpty(item.suffixName))
 							{
 								string nameTag = GetFieldValueFromDbr(extractBaseFolder, item.suffixName, "lootRandomizerName");
-								if (tagsItems.ContainsKey(nameTag))
-									suffix = tagsItems[nameTag];
+								if (_tagsItems.ContainsKey(nameTag))
+									suffix = _tagsItems[nameTag];
 							}
 							//if (useAlternateAffixFormat)
 							//{
@@ -413,6 +326,7 @@ namespace GDStashLib
 				//item.Name += String.Format(" +{0} {1}", skillLevel, skillName);
 			}
 		}
+
 		public static string GetFieldValueFromDbr(string extractbaseFolder, string filename, string fieldName)
 		{
 			string fieldValue = null;
